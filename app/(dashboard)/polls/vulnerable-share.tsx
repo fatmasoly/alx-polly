@@ -40,8 +40,10 @@ export default function VulnerableShare({
     }
   };
 
+  const safeTitle = String(pollTitle ?? "");
+
   const shareOnTwitter = () => {
-    const text = encodeURIComponent(`Check out this poll: ${pollTitle}`);
+    const text = encodeURIComponent(`Check out this poll: ${safeTitle}`);
     const url = encodeURIComponent(shareUrl);
     window.open(
       `https://twitter.com/intent/tweet?text=${text}&url=${url}`,
@@ -58,7 +60,7 @@ export default function VulnerableShare({
   };
 
   const shareViaEmail = () => {
-    const subject = encodeURIComponent(`Poll: ${pollTitle}`);
+    const subject = encodeURIComponent(`Poll: ${safeTitle}`);
     const body = encodeURIComponent(
       `Hi! I'd like to share this poll with you: ${shareUrl}`,
     );
