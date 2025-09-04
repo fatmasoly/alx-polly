@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -11,6 +12,7 @@ import {
 } from "@/components/ui/card";
 import { deletePoll } from "@/app/lib/actions/poll-actions";
 import { createClient } from "@/lib/supabase/client";
+import { isAdmin } from "@/app/lib/security/authorization";
 
 interface Poll {
   id: string;
@@ -24,10 +26,25 @@ export default function AdminPage() {
   const [polls, setPolls] = useState<Poll[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleteLoading, setDeleteLoading] = useState<string | null>(null);
+  const [authorized, setAuthorized] = useState(false);
+  const router = useRouter();
 
   useEffect(() => {
-    fetchAllPolls();
-  }, []);
+    // Check if user is admin
+    const checkAdminStatus = async () => {
+      const adminResult = await isAdmin();
+      if (!adminResult.ok) {
+        // Redirect to unauthorized page
+        router.push('/unauthorized');
+        return;
+      }
+      
+      setAuthorized(true);
+      fetchAllPolls();
+    };
+    
+    checkAdminStatus();
+  }, [router]);
 
   const fetchAllPolls = async () => {
     const supabase = createClient();
@@ -56,6 +73,10 @@ export default function AdminPage() {
 
   if (loading) {
     return <div className="p-6">Loading all polls...</div>;
+  }
+  
+  if (!authorized) {
+    return null; // Will be redirected by useEffect
   }
 
   return (

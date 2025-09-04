@@ -72,6 +72,8 @@ export async function getUserPolls() {
 // GET POLL BY ID
 export async function getPollById(id: string) {
   const supabase = await createClient();
+  
+  // Get the poll data
   const { data, error } = await supabase
     .from("polls")
     .select("*")
@@ -79,6 +81,10 @@ export async function getPollById(id: string) {
     .single();
 
   if (error) return { poll: null, error: error.message };
+  
+  // No need to check ownership for viewing a poll - polls are public
+  // But we could add visibility settings in the future if needed
+  
   return { poll: data, error: null };
 }
 
@@ -138,17 +144,43 @@ export async function deletePoll(id: string) {
   const ip = getClientIp();
   const rl = rateLimit(`deletePoll:${ip}`, 10, 60_000);
   if (!rl.ok) return { error: rl.error };
-  // Enforce ownership on delete
+  
+  // Get user from session
   const {
     data: { user },
+    error: userError
   } = await supabase.auth.getUser();
-  if (!user) return { error: "You must be logged in to delete a poll." };
-
+  
+  if (userError || !user) {
+    return { error: "You must be logged in to delete a poll." };
+  }
+  
+  // Import the isAdmin function
+  const { isAdmin } = await import('@/app/lib/security/authorization');
+  
+  // Check if user is admin
+  const adminResult = await isAdmin();
+  
+  // If user is admin, allow deletion without ownership check
+  if (adminResult.ok) {
+    const { error } = await supabase
+      .from("polls")
+      .delete()
+      .eq("id", id);
+      
+    if (error) return { error: error.message };
+    revalidatePath("/polls");
+    revalidatePath("/admin");
+    return { error: null };
+  }
+  
+  // For regular users, enforce ownership
   const { error } = await supabase
     .from("polls")
     .delete()
     .eq("id", id)
     .eq("user_id", user.id);
+    
   if (error) return { error: error.message };
   revalidatePath("/polls");
   return { error: null };
@@ -184,7 +216,30 @@ export async function updatePoll(pollId: string, formData: FormData) {
     return { error: "You must be logged in to update a poll." };
   }
 
-  // Only allow updating polls owned by the user
+  // Import the isAdmin function
+  const { isAdmin } = await import('@/app/lib/security/authorization');
+  
+  // Check if user is admin
+  const adminResult = await isAdmin();
+  
+  // If user is admin, allow update without ownership check
+  if (adminResult.ok) {
+    const { error } = await supabase
+      .from("polls")
+      .update({
+        question: validated.data.question,
+        options: validated.data.options,
+      })
+      .eq("id", pollId);
+      
+    if (error) return { error: error.message };
+    revalidatePath(`/polls/${pollId}`);
+    revalidatePath("/polls");
+    revalidatePath("/admin");
+    return { error: null };
+  }
+  
+  // For regular users, enforce ownership
   const { error } = await supabase
     .from("polls")
     .update({
@@ -198,5 +253,7 @@ export async function updatePoll(pollId: string, formData: FormData) {
     return { error: error.message };
   }
 
+  revalidatePath(`/polls/${pollId}`);
+  revalidatePath("/polls");
   return { error: null };
 }

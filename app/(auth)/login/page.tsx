@@ -1,16 +1,32 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { login } from '@/app/lib/actions/auth-actions';
+import CSRFToken from '@/app/components/CSRFToken';
 
 export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const [csrfToken, setCsrfToken] = useState<string>('');
+
+  useEffect(() => {
+    // Fetch CSRF token when component mounts
+    fetch('/api/csrf')
+      .then(response => response.json())
+      .then(data => {
+        setCsrfToken(data.token);
+      })
+      .catch(error => {
+        console.error('Failed to fetch CSRF token:', error);
+        setError('Security error. Please try again.');
+      });
+  }, []);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -18,10 +34,8 @@ export default function LoginPage() {
     setError(null);
 
     const formData = new FormData(event.currentTarget);
-    const email = formData.get('email') as string;
-    const password = formData.get('password') as string;
-
-    const result = await login({ email, password });
+    
+    const result = await login(formData);
 
     if (result?.error) {
       setError(result.error);
@@ -62,8 +76,9 @@ export default function LoginPage() {
               />
             </div>
             {error && <p className="text-red-500 text-sm">{error}</p>}
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? 'Logging in...' : 'Login'}
+            <CSRFToken token={csrfToken} />
+            <Button type="submit" className="w-full" disabled={loading || !csrfToken}>
+              {loading ? 'Logging in...' : csrfToken ? 'Login' : 'Loading...'}
             </Button>
           </form>
         </CardContent>

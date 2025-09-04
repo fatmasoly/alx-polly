@@ -1,34 +1,67 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { register } from '@/app/lib/actions/auth-actions';
+import CSRFToken from '@/app/components/CSRFToken';
+import { getPasswordValidationMessage } from '@/app/lib/validation/password';
 
 export default function RegisterPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  const [csrfToken, setCsrfToken] = useState<string>('');
+  const [passwordValidation, setPasswordValidation] = useState<string>('');
+  const [password, setPassword] = useState<string>('');
+  const [confirmPassword, setConfirmPassword] = useState<string>('');
+  const [passwordsMatch, setPasswordsMatch] = useState<boolean>(true);
+
+  useEffect(() => {
+    // Fetch CSRF token when component mounts
+    fetch('/api/csrf')
+      .then(response => response.json())
+      .then(data => {
+        setCsrfToken(data.token);
+      })
+      .catch(error => {
+        console.error('Failed to fetch CSRF token:', error);
+        setError('Security error. Please try again.');
+      });
+  }, []);
+
+  // Check password strength as user types
+  const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newPassword = e.target.value;
+    setPassword(newPassword);
+    setPasswordValidation(getPasswordValidationMessage(newPassword));
+    setPasswordsMatch(newPassword === confirmPassword);
+  };
+
+  // Check if passwords match as user types
+  const handleConfirmPasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newConfirmPassword = e.target.value;
+    setConfirmPassword(newConfirmPassword);
+    setPasswordsMatch(password === newConfirmPassword);
+  };
+
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setLoading(true);
     setError(null);
-    const formData = new FormData(event.currentTarget);
-    const name = formData.get('name') as string;
-    const email = formData.get('email') as string;
-    const password = formData.get('password') as string;
-    const confirmPassword = formData.get('confirmPassword') as string;
-
-    if (password !== confirmPassword) {
+    
+    if (!passwordsMatch) {
       setError('Passwords do not match');
       setLoading(false);
       return;
     }
 
-    const result = await register({ name, email, password });
+    const formData = new FormData(event.currentTarget);
+    
+    const result = await register(formData);
 
     if (result?.error) {
       setError(result.error);
@@ -76,7 +109,14 @@ export default function RegisterPage() {
                 type="password" 
                 required
                 autoComplete="new-password"
+                value={password}
+                onChange={handlePasswordChange}
               />
+              {password && (
+                <p className={`text-xs mt-1 ${passwordValidation.includes('meets') ? 'text-green-500' : 'text-amber-500'}`}>
+                  {passwordValidation}
+                </p>
+              )
             </div>
             <div className="space-y-2">
               <Label htmlFor="confirmPassword">Confirm Password</Label>
@@ -86,11 +126,23 @@ export default function RegisterPage() {
                 type="password" 
                 required
                 autoComplete="new-password"
+                value={confirmPassword}
+                onChange={handleConfirmPasswordChange}
               />
+              {confirmPassword && !passwordsMatch && (
+                <p className="text-xs mt-1 text-red-500">
+                  Passwords do not match
+                </p>
+              )
             </div>
             {error && <p className="text-red-500 text-sm">{error}</p>}
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? 'Registering...' : 'Register'}
+            <CSRFToken token={csrfToken} />
+            <Button 
+              type="submit" 
+              className="w-full" 
+              disabled={loading || !csrfToken || !passwordsMatch || password !== confirmPassword}
+            >
+              {loading ? 'Registering...' : csrfToken ? 'Register' : 'Loading...'}
             </Button>
           </form>
         </CardContent>

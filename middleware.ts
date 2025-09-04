@@ -1,7 +1,21 @@
-import { type NextRequest } from 'next/server'
+import { type NextRequest, NextResponse } from 'next/server'
 import { updateSession } from '@/lib/supabase/middleware'
 
 export async function middleware(request: NextRequest) {
+  const path = request.nextUrl.pathname;
+  
+  // Protect admin routes
+  if (path.includes('/admin')) {
+    // Check if user is authenticated
+    const isAuthenticated = request.cookies.has('sb-access-token') || 
+                           request.cookies.has('sb-refresh-token');
+    
+    if (!isAuthenticated) {
+      return NextResponse.redirect(new URL('/login', request.url));
+    }
+  }
+  
+  // Update session for all routes
   return await updateSession(request)
 }
 
